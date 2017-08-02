@@ -4,7 +4,8 @@
             [incanter.stats :as istats]                        
             [incanter.optimize :as iopt]
             [incanter.excel :as xls]))
-;; TODO: test aic, test deviance analysis
+;; TODO: test aic, test deviance analysis, rewrite deviance using bindings to
+;; avoid verbosity
 ;; utility functions
 (defn apply-to-all
   "applies a function to all elements of a nx1 matrix (math vector)"
@@ -110,8 +111,7 @@ the optimizer."
 ; deviance analysis
 (defn deviance-analysis [y x beta family link start]
   (let [n (i/nrow x) ; number obvservations
-        ones (i/matrix 1 n)
-        id (i/identity-matrix n)
+        [ones id] [(i/matrix 1 n) (i/identity-matrix n)]
         null-objective
         (fn [theta] (family link y ones))
         full-objective
