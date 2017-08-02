@@ -4,6 +4,7 @@
             [incanter.stats :as istats]                        
             [incanter.optimize :as iopt]
             [incanter.excel :as xls]))
+;; TODO: test aic, test deviance analysis
 ;; utility functions
 (defn apply-to-all
   "applies a function to all elements of a nx1 matrix (math vector)"
@@ -95,25 +96,50 @@ the optimizer."
 ;; generalized linear model
 (defn glm [y x start & {:keys [family link]
                         :or {family log-binomial link logit}}]
-  (let [objective-function
-        (fn [theta] (family link y x theta))
+  (let [n (i/nrow x)
+        objective-function
+        (fn [theta] (family link y x theta)) ;define objective function
         beta-hat
         (:value (iopt/maximize objective-function start))
         parametrization {:x x :y y :beta beta-hat :link link
-                         :family log-binomial}
-        variance (i/diag (cov-matrix parametrization))]
-    beta-hat))
+                         :family family} ;parametrization map for variance
+        variance (i/diag (cov-matrix parametrization)) ;compute variance
+        aic (* 2 (- n (family link y x beta-hat)))
+        ]
+    {:beta beta-hat :variance variance :aic aic}))
+; deviance analysis
+(defn deviance-analysis [y x beta family link start]
+  (let [n (i/nrow x) ; number obvservations
+        ones (i/matrix 1 n)
+        id (i/identity-matrix n)
+        null-objective
+        (fn [theta] (family link y ones))
+        full-objective
+        (fn [theta] (family link y id))
+        beta-null (:value (iopt/maximize null-objective start))
+        beta-full (:value (iopt/maximize full-objective start))
+        log-null (family link y ones beta-null)
+        log-full (family link y id beta-full)
+        log-model (family link y x beta)
+        ]
+    {:null-deviance (i/mult 2 (- log-full log-null))
+     :residual-deviance (i/mult 2 (- log-full log-model))}))
 
 ;; simulations and tests
-(def x (istats/sample-mvn 100000 :sigma (i/diag [1 2])))
-(def beta (i/matrix [0.3 -0.2] 1))
+; covariates
+(def x (istats/sample-mvn 100 :sigma (i/diag [1 2])))
+; parameters
+(def beta (i/matrix [0.5 -0.3] 1))
+; latent variable
 (def y-star (i/plus (i/mmult x beta)
                     (istats/sample-mvn (i/nrow x) :sigma (i/diag  [1]))))
+; obvserved variable
 (def y (i/matrix (apply-to-all discretize (logit y-star)) 1))
+; parametrization for variance multi
 (def parametrization {:x x :y y :beta beta :link logit :family log-binomial})
 (println (reduce i/plus (gradient parametrization)))
 (println (cov-matrix parametrization))
-
+; test optimization
 (def optzed (glm y x [0 0]))
 (println optzed)
 
